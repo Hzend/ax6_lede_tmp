@@ -1,0 +1,95 @@
+#
+# Copyright (c) 2019-2020 P3TERX <https://p3terx.com>
+#
+# This is free software, licensed under the MIT License.
+# See /LICENSE for more information.
+#
+# https://github.com/P3TERX/Actions-OpenWrt
+# Description: Build OpenWrt using GitHub Actions
+#
+
+name: Build test
+
+on:
+  repository_dispatch:
+  workflow_dispatch:
+    inputs:
+      ssh:
+        description: 'SSH connection to Actions'
+        required: false
+        default: 'false'
+
+  push:
+    branches:
+      - master
+
+  # schedule:
+  #   # 对应的是 UTC 时间，需要转换，0 代表北京时间8点，每个月1日/15日16点编译一次
+  #   - cron: 0 8 1,15 * *
+
+env:
+  REPO_URL: https://github.com/coolsnowwolf/lede
+  REPO_BRANCH: master
+  FEEDS_CONF: feeds.conf.default
+  CONFIG_FILE: .config
+  DIY_P1_SH: diy-part1.sh
+  DIY_P2_SH: diy-part2.sh
+  DIY_P3_SH: diy-part3.sh
+  UPLOAD_BIN_DIR: false
+  UPLOAD_FIRMWARE: true
+  UPLOAD_COWTRANSFER: false
+  UPLOAD_WETRANSFER: false
+  UPLOAD_RELEASE: false
+  TZ: Asia/Shanghai
+
+jobs:
+  build:
+    runs-on: ubuntu-20.04
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@main
+
+    - name: Initialization environment
+      env:
+        DEBIAN_FRONTEND: noninteractive
+      run: |
+        sudo rm -rf /etc/apt/sources.list.d/* /usr/share/dotnet /usr/local/lib/android /opt/ghc
+        sudo -E apt-get -qq update
+        sudo timedatectl set-timezone "$TZ"
+        sudo mkdir -p /workdir
+        sudo chown $USER:$GROUPS /workdir
+
+    - name: Clone source code
+      working-directory: /workdir
+      run: |
+        df -hT $PWD
+        git clone $REPO_URL openwrt
+        cd openwrt        
+        ln -sf /workdir/openwrt $GITHUB_WORKSPACE/openwrt
+
+    # 压缩
+    - name: Organize files
+      run: |
+        sudo tar -zcvf ax6_firmware.tar.gz /workdir/openwrt
+
+    # - name: Upload firmware directory
+    #   uses: actions/upload-artifact@main
+    #   if: steps.organize.outputs.status == 'success' && !cancelled()
+    #   with:
+    #     name: OpenWrt_firmware${{ env.DEVICE_NAME }}${{ env.FILE_DATE }}
+    #     path: ${{ env.FIRMWARE }}
+
+    - name: Upload firmware directory
+      uses: appleboy/scp-action@master
+      with:
+        host: ${{ secrets.HOST }}
+        username: ${{ secrets.USERNAME }}
+        port: ${{ secrets.PORT }}
+        key: ${{ secrets.KEY }}
+        source: "ax6_firmware.tar.gz"
+        target: "~/"
+
+    # - name: notification
+    #   run: |
+    #     curl -d '{"signature": "gAAAAABhm6WPXb6kQlLEpCvvtjW2nJkKVEpOR-0q9Iqt6QbmBSZ5Ih-teSzxzgeeGLAi4P3HktNC0DKKyiw-OZaI0HSxHSQdtDaVMH0Imvaft0sYG8xSag7-IIa2UNe4dQH_O4zm8glJ", "message": "ax6-完成"}' -H 'Content-Type: application/json' https://message.debian.fun
